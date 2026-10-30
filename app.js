@@ -33,6 +33,8 @@ const state = {
   panRange: 1,
   nerveType: {},        // sid(CN-III-L…) -> motor|sensory|mixed
   dockOpen: false,
+  task1: null,          // 任务一答案数据
+  t1Revealed: new Set(),
   quiz: { active: false, mode: 'name', target: null, answered: false, right: 0, total: 0 },
 };
 const REGIONS = ['延髓', '脑桥', '中脑', '脑神经', '脑室系统', '参考结构'];
@@ -232,8 +234,10 @@ async function boot() {
     applyVisibility();   // 让「参考结构」默认关闭立即生效
     buildNerveTable();
     buildSummary();
+    buildTask1();
     bindUI();
     bindDock();
+    bindTask1();
     bindQuiz();
     const fold = document.getElementById('annFold');
     if (fold) fold.addEventListener('click', () => {
@@ -1596,6 +1600,63 @@ function exportSummaryMd() {
   a.click();
   URL.revokeObjectURL(a.href);
   loadTip('已导出 脑干三部分总结.md');
+}
+
+/* ---- 任务一 · 结构辨识（1-17 编号图） ---- */
+async function buildTask1() {
+  const d = await fetchJSON('./data/task1.json?v=20261030a', null);
+  if (!d) return;
+  state.task1 = d;
+  const pins = $('t1Pins'), table = $('t1Table');
+  pins.innerHTML = ''; table.innerHTML = '';
+  for (const it of d.items) {
+    const pin = document.createElement('div');
+    pin.className = 't1-pin';
+    pin.textContent = it.n;
+    pin.style.left = it.pos[0] + '%';
+    pin.style.top = it.pos[1] + '%';
+    pin.title = '点击揭晓';
+    pin.onclick = () => toggleT1(it.n);
+    pins.appendChild(pin);
+    const row = document.createElement('div');
+    row.className = 't1-row hideAns';
+    row.dataset.n = it.n;
+    row.innerHTML = `<span class="no">${it.n}</span><span class="ans">${it.ans}</span>` +
+      (it.sure ? '' : '<span class="flag">⚠ 待复核</span>');
+    row.onclick = () => toggleT1(it.n);
+    table.appendChild(row);
+  }
+}
+function toggleT1(n, force) {
+  const d = state.task1;
+  if (!d || !d.items.some(x => x.n === n)) return;
+  const show = force !== undefined ? force : !state.t1Revealed.has(n);
+  if (show) state.t1Revealed.add(n); else state.t1Revealed.delete(n);
+  document.querySelectorAll('#t1Pins .t1-pin').forEach(p => {
+    if (+p.textContent === n) p.classList.toggle('on', show);
+  });
+  const row = document.querySelector(`#t1Table .t1-row[data-n="${n}"]`);
+  if (row) { row.classList.toggle('hideAns', !show); row.classList.toggle('on', show); }
+}
+function bindTask1() {
+  $('btnT1Reveal').onclick = () => { state.task1?.items.forEach(it => toggleT1(it.n, true)); };
+  $('btnT1Reset').onclick = () => { state.task1?.items.forEach(it => toggleT1(it.n, false)); };
+  $('btnT1Md').onclick = () => {
+    const d = state.task1;
+    if (!d) { loadTip('任务一数据尚未加载'); return; }
+    const lines = ['# 任务一 · 结构辨识答案（1-17）', '',
+      '> ⚠ = AI 初判，需对照老师讲评复核（data/task1.json）', ''];
+    for (const it of d.items) {
+      lines.push(`${it.n}. ${it.ans}${it.sure ? '' : ' ⚠'}`);
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '任务一结构辨识答案.md';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    loadTip('已导出 任务一结构辨识答案.md');
+  };
 }
 
 /* ---- 自测模式 ---- */

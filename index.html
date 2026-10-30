@@ -304,6 +304,34 @@
   #quizStart:hover{background:rgba(143,196,255,.12)}
   #quizScope{font-size:11px;color:var(--dim);margin-top:10px;line-height:1.6}
 
+  /* 任务一 · 结构辨识 */
+  #t1Wrap{display:flex;gap:14px;align-items:flex-start}
+  #t1ImgBox{position:relative;flex:0 0 52%;min-width:0;border-radius:10px;overflow:hidden;
+    background:#fff;border:1px solid var(--line)}
+  #t1Img{display:block;width:100%;height:auto}
+  #t1Pins .t1-pin{position:absolute;transform:translate(-50%,-50%);width:26px;height:26px;
+    border-radius:50%;background:rgba(18,22,32,.82);color:#ffd9a8;border:1px solid rgba(255,177,77,.55);
+    font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;user-select:none;box-shadow:0 2px 8px rgba(0,0,0,.35);transition:.12s}
+  #t1Pins .t1-pin:hover{background:rgba(77,163,255,.9);color:#fff}
+  #t1Pins .t1-pin.on{background:rgba(125,207,142,.92);color:#0d2214;border-color:rgba(125,207,142,.8)}
+  #t1Table{flex:1 1 auto;display:flex;flex-direction:column;gap:3px;min-width:0}
+  .t1-row{display:flex;gap:8px;align-items:baseline;font-size:12px;color:#c3ccdd;
+    padding:4px 8px;border-radius:7px;cursor:pointer}
+  .t1-row:hover{background:rgba(255,255,255,.05)}
+  .t1-row .no{font-weight:700;color:#ffd9a8;width:22px;flex:0 0 auto;text-align:right}
+  .t1-row .ans{flex:1 1 auto;min-width:0}
+  .t1-row.hideAns .ans{color:transparent;background:rgba(255,255,255,.08);border-radius:5px}
+  .t1-row.on{background:rgba(125,207,142,.12)}
+  .t1-row.on .no{color:#7dcf8e}
+  .t1-row .flag{font-size:10px;color:#ffb14d;flex:0 0 auto}
+  #t1Note{font-size:11px;color:var(--dim);margin-top:10px;line-height:1.6}
+  #t1Note code{background:rgba(255,255,255,.08);border-radius:4px;padding:1px 5px;color:#8fc4ff}
+  @media(max-width:720px){
+    #t1Wrap{flex-direction:column}
+    #t1ImgBox{flex:none;width:100%}
+  }
+
   /* 双击 index.html 时的引导页 */
   #fileWarn{position:fixed;inset:0;z-index:99;display:none;flex-direction:column;
     align-items:center;justify-content:center;background:var(--bg);padding:28px;text-align:center}
@@ -450,6 +478,7 @@
   <div id="dockHead">
     <div class="dock-tab on" data-page="nerve">脑神经表</div>
     <div class="dock-tab" data-page="summary">任务二 · 三部分总结</div>
+    <div class="dock-tab" data-page="task1">任务一 · 结构辨识（1-17）</div>
     <div class="dock-tab" data-page="quiz">自测模式</div>
     <div id="dockClose">✕</div>
   </div>
@@ -461,6 +490,10 @@
         <span><span class="dot" style="background:var(--nerve-mixed)"></span>混合性</span>
         <span style="margin-left:auto">点击行 → 3D 高亮 + 详情</span>
       </div>
+      <div style="font-size:11px;color:var(--dim);margin:0 0 8px;line-height:1.6">
+        分类口诀：<b style="color:#cdd8ea">纯感觉 I、II、VIII · 纯运动 III、IV、VI、XI、XII · 混合 V、VII、IX、X</b>
+        （一嗅二视三动眼，四滑五叉六外展，七面八听九舌咽，十迷十一副十二舌下全）
+      </div>
       <div id="nerveRows"></div>
       <div id="nerveDetail"></div>
     </div>
@@ -469,6 +502,21 @@
         <span class="mini-btn" id="btnSumMd">导出 Markdown（抄进报告）</span>
       </div>
       <div class="sum-cols" id="sumCols"></div>
+    </div>
+    <div class="dock-page" id="page-task1">
+      <div id="sumExportRow">
+        <span class="mini-btn" id="btnT1Reveal">全部揭示</span>
+        <span class="mini-btn blue" id="btnT1Reset">重置</span>
+        <span class="mini-btn" id="btnT1Md">导出答案表</span>
+      </div>
+      <div id="t1Wrap">
+        <div id="t1ImgBox">
+          <img id="t1Img" src="./data/task1-figure.png?v=20261030a" alt="椎管内的脊髓（结构辨识 1-17）">
+          <div id="t1Pins"></div>
+        </div>
+        <div id="t1Table"></div>
+      </div>
+      <div id="t1Note">点击图上或表中的数字揭晓答案。⚠ 项为 AI 初判，请对照老师讲评后在 <code>data/task1.json</code> 中修正。</div>
     </div>
     <div class="dock-page" id="page-quiz">
       <div id="quizBox">
@@ -515,6 +563,6 @@
   }
 }
 </script>
-<script src="./app.js?v=20261030c" type="module"></script>
+<script src="./app.js?v=20261030d" type="module"></script>
 </body>
 </html>
