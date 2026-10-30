@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>脑干 3D 交互模型</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🧠</text></svg>">
+<script>
+  // file:// 直接双击打开时，ES module 与 glb 加载会被浏览器同源策略拦截，
+  // 这里提前切到提示模式，避免只留一个永远转圈的加载动画。
+  if (location.protocol === 'file:') {
+    document.documentElement.classList.add('file-mode');
+  }
+</script>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:rgba(18,22,32,.92); --line:rgba(120,140,180,.22);
+    --txt:#e6ebf5; --dim:#8b96ad; --accent:#ff4d4f; --accent2:#4da3ff;
+    --nerve-motor:#ff8a65; --nerve-sensory:#4fc3f7; --nerve-mixed:#ba68c8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--bg);
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--txt)}
+  #app{position:fixed;inset:0}
+  canvas{display:block}
+  html{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  body{-webkit-user-select:none;user-select:none}
+  #info,#dockBody{-webkit-user-select:text;user-select:text}
+
+  /* 加载层 */
+  #loader{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;background:var(--bg);z-index:50;transition:opacity .6s}
+  #loader.hide{opacity:0;pointer-events:none}
+  .spin{width:42px;height:42px;border:3px solid var(--line);border-top-color:var(--accent2);
+    border-radius:50%;animation:sp .9s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  #loadTxt{margin-top:16px;font-size:14px;color:var(--dim);letter-spacing:.5px}
+  #barWrap{margin-top:14px;width:220px;height:4px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden}
+  #bar{height:100%;width:0;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width .2s}
+
+  /* 顶部标题 */
+  #title{position:fixed;top:18px;left:22px;z-index:10;pointer-events:none}
+  #title h1{font-size:17px;font-weight:600;letter-spacing:.5px}
+  #title p{font-size:11.5px;color:var(--dim);margin-top:4px}
+
+  /* 左侧工具面板 */
+  #tools{position:fixed;top:78px;left:22px;z-index:12;width:186px;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:14px 14px 12px;box-shadow:0 8px 32px rgba(0,0,0,.45);transform:translateX(0);
+    max-height:calc(100vh - 100px);overflow-y:auto}
+  #tools h2{font-size:11px;color:var(--dim);font-weight:600;letter-spacing:1.2px;
+    text-transform:uppercase;margin-bottom:9px}
+  .reg{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;cursor:pointer;
+    font-size:12.5px;transition:background .15s;user-select:none}
+  .reg:hover{background:rgba(255,255,255,.06)}
+  .reg .dot{width:7px;height:7px;border-radius:50%;background:var(--accent2);flex:0 0 auto}
+  .reg.off{opacity:.38}
+  .reg .n{margin-left:auto;font-size:10.5px;color:var(--dim)}
+  .reg .chev{font-size:13px;color:var(--dim);width:22px;height:22px;line-height:20px;
+    text-align:center;border-radius:6px;cursor:pointer;transition:transform .15s,background .15s;
+    flex:0 0 auto}
+  .reg .chev:hover{background:rgba(255,255,255,.1);color:var(--txt)}
+  .reg.open .chev{transform:rotate(90deg)}
+  .reg-list{display:none;padding:2px 0 4px 10px}
+  .reg-list.open,.reg.open + .reg-list{display:block}
+  .reg-sub{display:flex;align-items:center;gap:6px;padding:5px 8px 3px;margin-top:3px;
+    font-size:10.5px;color:var(--accent2);letter-spacing:1px;
+    border-top:1px dashed var(--line);cursor:pointer;user-select:none;border-radius:6px}
+  .reg-sub:hover{background:rgba(255,255,255,.05)}
+  .reg-sub .chev{font-size:9px;width:12px;transition:transform .15s;flex:0 0 auto}
+  .reg-sub.open .chev{transform:rotate(90deg)}
+  .reg-sub .n{margin-left:auto;font-size:9.5px;color:var(--dim)}
+  .reg-group{display:none}
+  .reg-sub.open + .reg-group{display:block}
+  .reg-list.searching .reg-group{display:block}
+  .bone-item{display:flex;align-items:center;gap:4px;padding:3.5px 8px 3.5px 14px;border-radius:6px;
+    cursor:pointer;font-size:11.5px;color:#c3ccdd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bone-item:hover{background:rgba(255,255,255,.07);color:var(--txt)}
+  .bone-item.hid{opacity:.35}
+  .bone-item.hid span:not(.star){text-decoration:line-through}
+  .bone-item .star{color:#ff7043;font-size:10px;flex:0 0 auto}
+  .reg-filter{width:100%;margin:3px 0 5px;padding:4px 8px;border-radius:6px;font-size:11px;
+    background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--txt);outline:none}
+  .reg-filter:focus{border-color:var(--accent2)}
+  .divider{height:1px;background:var(--line);margin:10px 0}
+  .tbtn{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:7px;cursor:pointer;
+    font-size:12.5px;transition:background .15s;user-select:none}
+  .tbtn:hover{background:rgba(255,255,255,.06)}
+  .tbtn.on{background:rgba(77,163,255,.15)}
+  .tbtn .ic{font-size:13px;width:15px;text-align:center;opacity:.85}
+
+  /* 右侧信息面板 */
+  #info{position:fixed;top:18px;right:22px;z-index:12;width:300px;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:0 8px 32px rgba(0,0,0,.45);
+    opacity:0;transform:translateY(-8px);transition:.25s;pointer-events:none;
+    max-height:calc(100vh - 40px);overflow-y:auto}
+  #info.show{opacity:1;transform:translateY(0);pointer-events:auto}
+  #info .tag{display:inline-block;font-size:10.5px;padding:2.5px 8px;border-radius:20px;
+    background:rgba(77,163,255,.18);color:#8fc4ff;letter-spacing:.5px;margin-bottom:11px}
+  #info h3{font-size:20px;font-weight:600;letter-spacing:.5px;line-height:1.25}
+  .en-name{font-size:13px;color:#8fc4ff;margin-top:3px}
+  #info .latin{font-size:12px;color:var(--dim);font-style:italic;margin-top:3px}
+  #info .desc{font-size:13px;line-height:1.72;color:#c3ccdd;margin-top:14px;
+    padding-top:14px;border-top:1px solid var(--line)}
+  #moreBtn{margin-top:10px;font-size:12px;color:var(--accent2);cursor:pointer;user-select:none}
+  #moreBtn:hover{text-decoration:underline}
+  #detail{display:none;margin-top:10px;border-top:1px dashed var(--line);padding-top:4px}
+  #detail.open{display:block}
+  #detail .d-sec{margin-top:10px}
+  #detail h4{font-size:11px;color:var(--dim);font-weight:600;letter-spacing:1px;margin-bottom:5px}
+  #detail p{font-size:12.5px;line-height:1.7;color:#c3ccdd}
+  #detail ul{margin:0;padding-left:18px;font-size:12.5px;line-height:1.7;color:#c3ccdd}
+  #info .fma{font-size:10.5px;color:#5a6478;margin-top:13px;letter-spacing:.4px}
+  .act-row{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+  .act-btn{flex:1 1 auto;text-align:center;padding:5px 8px;border-radius:7px;cursor:pointer;
+    font-size:11.5px;color:#c3ccdd;background:rgba(255,255,255,.06);
+    border:1px solid var(--line);white-space:nowrap;user-select:none;transition:.15s}
+  .act-btn:hover{background:rgba(255,255,255,.1);color:var(--txt)}
+  .act-btn.on{color:#ffb199;border-color:rgba(255,112,67,.45);background:rgba(255,112,67,.12)}
+  #editBar{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:12;display:none;
+    background:#3a2a10;color:#ffd9a8;font-size:12px;padding:8px 14px;border-radius:20px;
+    border:1px solid #8a6a30;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+  #editBar.show{display:block}
+  #annExport{color:#7dcf8e;cursor:pointer;margin-left:6px;text-decoration:underline}
+  #annEditSec{margin-top:8px;padding:8px;background:rgba(255,177,77,.07);border-radius:8px}
+  #annEditSec input,#annEditSec textarea{width:100%;box-sizing:border-box;margin-bottom:6px;
+    background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:6px;
+    color:var(--txt);font-size:12px;padding:5px 7px;font-family:inherit}
+  #annEditSec textarea{resize:vertical;min-height:40px}
+  #annEditSec .row{display:flex;gap:8px;align-items:center}
+  #annDel{color:#ff7a6e;cursor:pointer;font-size:11.5px;user-select:none}
+  #annEditTip{font-size:10.5px;color:var(--dim);margin-top:4px;line-height:1.4}
+  .op-row{display:flex;align-items:center;gap:8px;padding:7px 8px 3px;font-size:12.5px;
+    color:#c3ccdd;user-select:none}
+  .op-row .ic{font-size:13px;width:15px;text-align:center;opacity:.85}
+  #annOpVal{margin-left:auto;font-size:10.5px;color:var(--dim)}
+  #annOp,#clipPos{-webkit-appearance:none;appearance:none;width:calc(100% - 16px);height:4px;margin:0 8px 10px;
+    border-radius:3px;background:rgba(255,255,255,.15);cursor:pointer}
+  #annOp::-webkit-slider-thumb,#clipPos::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+    background:var(--accent2);box-shadow:0 0 0 3px rgba(77,163,255,.18)}
+  #annOp::-moz-range-thumb,#clipPos::-moz-range-thumb{width:14px;height:14px;border:none;border-radius:50%;background:var(--accent2)}
+  #clipPos:disabled{opacity:.35;cursor:default}
+  .ann-detail{margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,177,77,.3);
+    color:#e8dcc2;font-size:11.5px;line-height:1.6}
+  #annSec{margin-top:12px;border-top:1px dashed var(--line);padding-top:8px}
+  #annSec h4{font-size:11px;color:var(--dim);font-weight:600;letter-spacing:1px;margin-bottom:6px;
+    cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px}
+  #annFold{color:#8fa3c8;font-size:10px}
+  #annLabel{position:fixed;z-index:20;display:none;pointer-events:none;
+    padding:5px 10px;border-radius:7px;color:var(--txt);font-size:12px;white-space:nowrap;
+    background:rgba(18,22,32,.95);border:1px solid var(--line);box-shadow:0 4px 14px rgba(0,0,0,.4);
+    transform:translateY(-100%)}
+  #annList{display:flex;flex-wrap:wrap;gap:4px}
+  .ann-chip{display:inline-block;padding:3px 9px;border-radius:10px;font-size:11.5px;cursor:pointer;
+    background:rgba(255,177,77,.10);color:#ffcf96;border:1px solid rgba(255,177,77,.28);user-select:none}
+  .ann-chip:hover{background:rgba(255,177,77,.22)}
+  .ann-chip.on{background:rgba(255,120,60,.32);color:#ffd9b8}
+  .ann-desc{width:100%;font-size:12px;color:#e2d4b8;line-height:1.55;margin-top:6px;
+    padding:6px 8px;background:rgba(255,177,77,.07);border-radius:6px}
+  .note-sec{margin-top:12px;border-top:1px dashed var(--line);padding-top:8px}
+  .note-sec h4{font-size:11px;color:var(--dim);font-weight:600;letter-spacing:1px;margin-bottom:6px}
+  #noteBox{width:100%;box-sizing:border-box;resize:vertical;min-height:54px;font-size:12px;
+    line-height:1.6;color:var(--txt);background:rgba(255,255,255,.05);
+    border:1px solid var(--line);border-radius:7px;padding:7px 9px;outline:none;
+    font-family:inherit}
+  #noteBox:focus{border-color:var(--accent2)}
+  .note-foot{display:flex;gap:10px;align-items:center;margin-top:6px}
+  #noteSave{font-size:11.5px;color:var(--accent2);cursor:pointer;user-select:none}
+  #noteSave:hover{text-decoration:underline}
+  #noteSaved{font-size:11px;color:#7dcf8e}
+  #isolateBar{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);z-index:30;
+    font-size:12px;color:#ffb199;background:rgba(18,22,32,.92);padding:8px 18px;
+    border-radius:20px;border:1px solid rgba(255,112,67,.4);cursor:pointer;display:none;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+  #isolateBar.show{display:block}
+  #isolateBar:hover{color:#fff}
+  .data-row{display:flex;gap:8px;margin-bottom:6px}
+  .data-btn{flex:1;text-align:center;padding:5px 0;border-radius:7px;cursor:pointer;
+    font-size:11.5px;color:#c3ccdd;background:rgba(255,255,255,.06);
+    border:1px solid var(--line);user-select:none}
+  .data-btn:hover{background:rgba(255,255,255,.1);color:var(--txt)}
+  #importStat{font-size:10.5px;color:#7dcf8e;min-height:14px;line-height:1.4}
+  #close{position:absolute;top:13px;right:14px;width:22px;height:22px;border-radius:6px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--dim);
+    font-size:16px;line-height:1;transition:.15s}
+  #close:hover{background:rgba(255,255,255,.09);color:var(--txt)}
+
+  /* 悬浮提示 */
+  #hover{position:fixed;z-index:20;pointer-events:none;padding:5px 10px;border-radius:7px;
+    background:rgba(18,22,32,.95);border:1px solid var(--line);font-size:12px;
+    white-space:nowrap;opacity:0;transition:opacity .12s;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+  #hover.show{opacity:1}
+
+  /* 右侧垂直滑块：控制视角上下移动 */
+  #vpan{position:fixed;right:22px;top:50%;transform:translateY(-50%);margin-top:26px;z-index:12;
+    display:flex;flex-direction:column;align-items:center;gap:7px;padding:11px 7px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.45)}
+  #vpan .lab{font-size:10px;color:var(--dim);letter-spacing:1px;line-height:1;user-select:none}
+  #vpan .track{position:relative;width:22px;height:170px}
+  #vpRange{position:absolute;top:50%;left:50%;width:170px;height:22px;margin:0;
+    transform:translate(-50%,-50%) rotate(-90deg);
+    -webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+  #vpRange::-webkit-slider-runnable-track{height:4px;border-radius:3px;background:rgba(255,255,255,.15)}
+  #vpRange::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:var(--accent2);margin-top:-6px;box-shadow:0 0 0 3px rgba(77,163,255,.18)}
+  #vpRange::-moz-range-track{height:4px;border-radius:3px;background:rgba(255,255,255,.15)}
+  #vpRange::-moz-range-thumb{width:16px;height:16px;border:none;border-radius:50%;
+    background:var(--accent2);box-shadow:0 0 0 3px rgba(77,163,255,.18)}
+
+  /* 底部提示 */
+  #hint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:10;
+    font-size:11.5px;color:var(--dim);background:rgba(18,22,32,.8);padding:7px 16px;
+    border-radius:20px;border:1px solid var(--line);white-space:nowrap}
+  #hint b{color:#9fb0cc;font-weight:500}
+
+  /* 计数徽标 */
+  #count{position:fixed;bottom:16px;right:22px;z-index:10;font-size:11px;color:var(--dim);
+    background:rgba(18,22,32,.8);padding:7px 13px;border-radius:20px;
+    border:1px solid var(--line);cursor:pointer;user-select:none}
+  #count b{color:var(--accent2);font-weight:600}
+
+  /* ============ 底部学习面板（脑神经 / 总结 / 自测） ============ */
+  #dock{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(16px);
+    z-index:14;width:min(1020px,calc(100vw - 380px));opacity:0;pointer-events:none;
+    transition:.28s;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.5);
+    display:flex;flex-direction:column;max-height:min(52vh,460px)}
+  #dock.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
+  #dockHead{display:flex;align-items:center;gap:4px;padding:9px 12px 0;flex:0 0 auto}
+  .dock-tab{padding:7px 15px;border-radius:9px 9px 0 0;cursor:pointer;font-size:12.5px;
+    color:var(--dim);user-select:none;border:1px solid transparent;border-bottom:none}
+  .dock-tab:hover{color:var(--txt)}
+  .dock-tab.on{color:var(--txt);background:rgba(255,255,255,.05);border-color:var(--line)}
+  #dockClose{margin-left:auto;width:24px;height:24px;border-radius:6px;display:flex;align-items:center;
+    justify-content:center;cursor:pointer;color:var(--dim);font-size:15px}
+  #dockClose:hover{background:rgba(255,255,255,.09);color:var(--txt)}
+  #dockBody{overflow-y:auto;padding:12px 16px 14px;flex:1 1 auto}
+  .dock-page{display:none}
+  .dock-page.on{display:block}
+
+  /* 脑神经表 */
+  .nrow{display:flex;gap:10px;padding:7px 9px;border-radius:9px;cursor:pointer;align-items:baseline;
+    border:1px solid transparent;transition:.12s}
+  .nrow:hover{background:rgba(255,255,255,.05)}
+  .nrow.on{background:rgba(77,163,255,.12);border-color:rgba(77,163,255,.35)}
+  .nrow .num{font-size:12px;font-weight:700;width:34px;flex:0 0 auto;color:var(--dim)}
+  .nrow .nm{font-size:13px;font-weight:600;width:96px;flex:0 0 auto}
+  .nrow .tp{font-size:10.5px;padding:2px 8px;border-radius:10px;flex:0 0 auto;letter-spacing:.5px}
+  .tp.motor{background:rgba(255,138,101,.16);color:var(--nerve-motor)}
+  .tp.sensory{background:rgba(79,195,247,.16);color:var(--nerve-sensory)}
+  .tp.mixed{background:rgba(186,104,200,.18);color:var(--nerve-mixed)}
+  .nrow .ex{font-size:11.5px;color:#c3ccdd;flex:1 1 auto;line-height:1.5}
+  #nerveDetail{margin-top:10px;padding:12px;border-radius:10px;background:rgba(255,255,255,.04);
+    border:1px solid var(--line);font-size:12.5px;line-height:1.75;color:#c3ccdd;display:none}
+  #nerveDetail.show{display:block}
+  #nerveDetail h4{font-size:14px;color:var(--txt);margin-bottom:6px}
+  #nerveDetail b{color:#8fc4ff;font-weight:600}
+  #nerveLegend{font-size:10.5px;color:var(--dim);margin:2px 0 8px;display:flex;gap:14px}
+  #nerveLegend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+
+  /* 任务二总结矩阵 */
+  .sum-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .sum-col{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:11px;
+    padding:11px 12px;min-width:0}
+  .sum-col h3{font-size:14.5px;font-weight:700;color:var(--txt);letter-spacing:.5px}
+  .sum-col .lat{font-size:10.5px;color:var(--dim);font-style:italic;margin:1px 0 8px}
+  .sum-sec{margin-top:9px}
+  .sum-sec h4{font-size:10.5px;color:var(--accent2);letter-spacing:1.5px;font-weight:600;
+    margin-bottom:5px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+  .sum-sec .arr{font-size:9px;color:var(--dim);transition:transform .15s}
+  .sum-sec.folded .arr{transform:rotate(-90deg)}
+  .sum-items{display:flex;flex-direction:column;gap:3px}
+  .sum-sec.folded .sum-items{display:none}
+  .sum-item{font-size:12px;color:#c3ccdd;line-height:1.5;padding:3px 7px;border-radius:6px;cursor:default}
+  .sum-item.link{cursor:pointer}
+  .sum-item.link:hover{background:rgba(77,163,255,.12);color:var(--txt)}
+  .sum-item .nn{color:var(--dim);font-size:11px}
+  #sumExportRow{display:flex;justify-content:flex-end;margin-bottom:8px}
+  .mini-btn{font-size:11.5px;color:#7dcf8e;border:1px solid rgba(125,207,142,.35);border-radius:8px;
+    padding:5px 13px;cursor:pointer;user-select:none;background:rgba(125,207,142,.08)}
+  .mini-btn:hover{background:rgba(125,207,142,.16)}
+  .mini-btn.blue{color:#8fc4ff;border-color:rgba(143,196,255,.35);background:rgba(143,196,255,.08)}
+  .mini-btn.blue:hover{background:rgba(143,196,255,.16)}
+
+  /* 自测模式 */
+  #quizBox{max-width:640px;margin:0 auto;text-align:center;padding:6px 0}
+  #quizMode{display:flex;gap:8px;justify-content:center;margin-bottom:12px}
+  .qmode-btn{font-size:12px;padding:6px 16px;border-radius:18px;cursor:pointer;user-select:none;
+    border:1px solid var(--line);color:var(--dim)}
+  .qmode-btn.on{color:var(--txt);background:rgba(77,163,255,.18);border-color:rgba(77,163,255,.45)}
+  #quizQ{font-size:15px;line-height:1.6;margin:10px 0 14px;min-height:48px}
+  #quizQ .hl{color:#8fc4ff;font-weight:600}
+  #quizOpts{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:520px;margin:0 auto}
+  .qopt{font-size:13px;padding:10px 8px;border-radius:9px;border:1px solid var(--line);cursor:pointer;
+    user-select:none;color:#c3ccdd;background:rgba(255,255,255,.04);transition:.12s}
+  .qopt:hover{background:rgba(255,255,255,.09)}
+  .qopt.right{background:rgba(125,207,142,.2);border-color:rgba(125,207,142,.5);color:#b8ecc6}
+  .qopt.wrong{background:rgba(255,90,74,.18);border-color:rgba(255,90,74,.45);color:#ffb3a8}
+  #quizFoot{margin-top:12px;display:flex;justify-content:center;gap:18px;align-items:center;
+    font-size:12px;color:var(--dim)}
+  #quizScore b{color:#7dcf8e}
+  #quizNext{font-size:12.5px;color:#8fc4ff;cursor:pointer;user-select:none;padding:5px 14px;
+    border-radius:14px;border:1px solid rgba(143,196,255,.35)}
+  #quizNext:hover{background:rgba(143,196,255,.12)}
+  #quizStart{font-size:13px;color:#8fc4ff;cursor:pointer;user-select:none;padding:8px 22px;
+    border-radius:18px;border:1px solid rgba(143,196,255,.4);display:inline-block;margin-top:8px}
+  #quizStart:hover{background:rgba(143,196,255,.12)}
+  #quizScope{font-size:11px;color:var(--dim);margin-top:10px;line-height:1.6}
+
+  /* 双击 index.html 时的引导页 */
+  #fileWarn{position:fixed;inset:0;z-index:99;display:none;flex-direction:column;
+    align-items:center;justify-content:center;background:var(--bg);padding:28px;text-align:center}
+  html.file-mode #fileWarn{display:flex}
+  html.file-mode #loader,html.file-mode #app,html.file-mode #title,html.file-mode #tools,
+  html.file-mode #info,html.file-mode #hint,html.file-mode #count,
+  html.file-mode #mobileBtn,html.file-mode #hover,html.file-mode #vpan,html.file-mode #dock{display:none!important}
+  #fileWarn .badge{font-size:34px;margin-bottom:18px}
+  #fileWarn h2{font-size:19px;font-weight:600;letter-spacing:.5px;margin-bottom:12px}
+  #fileWarn .why{font-size:13px;line-height:1.85;color:#a8b4c8;max-width:540px}
+  #fileWarn ol{margin-top:20px;text-align:left;font-size:13.5px;line-height:2.05;color:#c3ccdd;max-width:540px}
+  #fileWarn code{background:rgba(255,255,255,.09);border:1px solid var(--line);border-radius:5px;
+    padding:2px 7px;font-size:12.5px;color:#8fc4ff}
+
+  #mobileBtn{display:none}
+  @media(max-width:720px){
+    #tools{transform:translateX(-120%);transition:.25s}
+    #tools.open{transform:translateX(0)}
+    #tools{top:78px;bottom:12px;max-height:none}
+    #info{width:calc(100vw - 32px);right:16px;top:auto;bottom:16px;max-height:46vh;overflow-y:auto}
+    #title{left:66px;top:20px}
+    #title h1{font-size:15px}
+    #mobileBtn{display:flex;position:fixed;top:18px;left:22px;z-index:13;width:34px;height:34px;
+      align-items:center;justify-content:center;background:var(--panel);border:1px solid var(--line);
+      border-radius:9px;cursor:pointer;font-size:15px}
+    #hint{display:none}
+    #vpan{right:8px;top:14px;transform:none;margin-top:0;padding:9px 6px}
+    #vpan .track{height:118px}
+    #vpRange{width:118px}
+    #dock{width:calc(100vw - 24px);max-height:60vh;bottom:12px}
+    .sum-cols{grid-template-columns:1fr}
+    #quizOpts{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="loader">
+  <div class="spin"></div>
+  <div id="loadTxt">正在加载脑干模型…</div>
+  <div id="barWrap"><div id="bar"></div></div>
+</div>
+
+<div id="fileWarn">
+  <div class="badge">🧠</div>
+  <h2>请用本地服务器打开</h2>
+  <p class="why">
+    浏览器不允许 <code>file://</code> 页面加载 <code>ES module</code> 和 <code>.glb</code> 模型文件，
+    所以直接双击 index.html 只会停在这一页。
+  </p>
+  <ol>
+    <li>回到本文件夹，双击 <code>start.bat</code>（Windows）</li>
+    <li>或在本文件夹里执行 <code>python -m http.server 8091</code>，再访问 <code>http://localhost:8091</code></li>
+  </ol>
+</div>
+
+<div id="title">
+  <h1>脑干 3D 交互模型</h1>
+  <p>延髓 · 脑桥 · 中脑 · 12 对脑神经 —— 点击任意结构查看说明</p>
+</div>
+
+<div id="editBar"></div>
+
+<div id="mobileBtn">☰</div>
+
+<div id="tools">
+  <h2>显示分区</h2>
+  <div id="regions"></div>
+  <div class="divider"></div>
+  <h2>选项</h2>
+  <div class="tbtn on" id="btnLabel"><span class="ic">🏷</span>结构名称标签</div>
+  <div class="tbtn" id="btnXray"><span class="ic">◍</span>X 光透视模式</div>
+  <div class="tbtn" id="btnKey"><span class="ic">★</span>标记标红</div>
+  <div class="tbtn" id="btnOnlyKey"><span class="ic">◎</span>仅看标记</div>
+  <div class="tbtn" id="btnShowAll"><span class="ic">👁</span>恢复显示</div>
+  <div class="tbtn" id="btnReset"><span class="ic">⟲</span>重置视角</div>
+  <div class="tbtn" id="btnSpin"><span class="ic">↻</span>自动旋转</div>
+  <div class="op-row"><span class="ic">◔</span>标注点不透明度<span id="annOpVal">50%</span></div>
+  <input type="range" id="annOp" min="15" max="100" step="5" value="50">
+  <div class="divider"></div>
+  <h2>学习</h2>
+  <div class="tbtn" id="btnNerve"><span class="ic">🧬</span>脑神经表（III–XII）</div>
+  <div class="tbtn" id="btnSummary"><span class="ic">📋</span>任务二·三部分总结</div>
+  <div class="tbtn" id="btnQuiz"><span class="ic">🎯</span>自测模式</div>
+  <div class="divider"></div>
+  <h2>剖面剖切</h2>
+  <div class="tbtn" id="clipY"><span class="ic">▬</span>横断面（上下切）</div>
+  <div class="tbtn" id="clipX"><span class="ic">▬</span>矢状面（左右切）</div>
+  <div class="tbtn" id="clipZ"><span class="ic">▬</span>冠状面（前后切）</div>
+  <div class="op-row"><span class="ic">✂</span>剖面位置<span id="clipPosVal">50%</span></div>
+  <input type="range" id="clipPos" min="0" max="100" step="1" value="50" disabled>
+  <div class="tbtn" id="clipInv"><span class="ic">⇅</span>保留另一侧</div>
+  <div class="tbtn" id="clipOff"><span class="ic">✕</span>关闭剖切</div>
+  <div class="divider"></div>
+  <h2>我的数据</h2>
+  <div class="data-row">
+    <span class="data-btn" id="btnExport">导出</span>
+    <span class="data-btn" id="btnImport">导入</span>
+  </div>
+  <div id="importStat"></div>
+  <input type="file" id="importFile" accept=".json,application/json" hidden>
+</div>
+
+<div id="info">
+  <div id="close">×</div>
+  <div class="tag" id="tag">—</div>
+  <h3 id="cn">—</h3>
+  <div class="en-name" id="enName">—</div>
+  <div class="latin" id="latin">—</div>
+  <div class="desc" id="desc">—</div>
+  <div class="act-row">
+    <span class="act-btn" id="actMark">★ <span class="act-txt">标记</span></span>
+    <span class="act-btn" id="actHide">👁 <span class="act-txt">隐藏</span></span>
+    <span class="act-btn" id="actIsolate">⤢ <span class="act-txt">单独查看</span></span>
+  </div>
+  <div id="annSec" hidden>
+    <h4 id="annFold">结构标注 <span id="annFoldArr">▾ 收起</span></h4>
+    <div id="annList"></div>
+    <div id="annEditSec" hidden>
+      <input id="annName" placeholder="结构名称（中文）">
+      <input id="annEn" placeholder="英文名（可选）">
+      <textarea id="annDesc" rows="2" placeholder="一句话简介"></textarea>
+      <textarea id="annDetail" rows="4" placeholder="详细介绍（功能、临床、扩展）"></textarea>
+      <div class="row">
+        <span id="annDel">✕ 删除此标注</span>
+        <span id="annEditTip">移动：拖动标注点，或双击结构面上的新位置</span>
+      </div>
+    </div>
+  </div>
+  <div class="note-sec">
+    <h4>我的笔记</h4>
+    <textarea id="noteBox" rows="3" placeholder="记录这个结构的知识点…"></textarea>
+    <div class="note-foot">
+      <span id="noteSave">保存笔记</span>
+      <span id="noteSaved"></span>
+    </div>
+  </div>
+  <div class="fma" id="fma">—</div>
+</div>
+
+<!-- 底部学习面板 -->
+<div id="dock">
+  <div id="dockHead">
+    <div class="dock-tab on" data-page="nerve">脑神经表</div>
+    <div class="dock-tab" data-page="summary">任务二 · 三部分总结</div>
+    <div class="dock-tab" data-page="quiz">自测模式</div>
+    <div id="dockClose">✕</div>
+  </div>
+  <div id="dockBody">
+    <div class="dock-page on" id="page-nerve">
+      <div id="nerveLegend">
+        <span><span class="dot" style="background:var(--nerve-motor)"></span>运动性</span>
+        <span><span class="dot" style="background:var(--nerve-sensory)"></span>感觉性</span>
+        <span><span class="dot" style="background:var(--nerve-mixed)"></span>混合性</span>
+        <span style="margin-left:auto">点击行 → 3D 高亮 + 详情</span>
+      </div>
+      <div id="nerveRows"></div>
+      <div id="nerveDetail"></div>
+    </div>
+    <div class="dock-page" id="page-summary">
+      <div id="sumExportRow">
+        <span class="mini-btn" id="btnSumMd">导出 Markdown（抄进报告）</span>
+      </div>
+      <div class="sum-cols" id="sumCols"></div>
+    </div>
+    <div class="dock-page" id="page-quiz">
+      <div id="quizBox">
+        <div id="quizMode">
+          <span class="qmode-btn on" data-qm="name">看 3D 猜名称</span>
+          <span class="qmode-btn" data-qm="pick">听名找结构</span>
+        </div>
+        <div id="quizQ">通过随机抽问巩固脑干结构。题目覆盖：三部分本体、外部标志、四对脑神经与参考结构。</div>
+        <div id="quizOpts"></div>
+        <div id="quizFoot" hidden>
+          <span id="quizScore">得分 <b>0</b> / <span>0</span></span>
+          <span id="quizNext">下一题 ▸</span>
+        </div>
+        <div id="quizStart">开始自测</div>
+        <div id="quizScope">范围：延髓 / 脑桥 / 中脑 / 脑神经，共 <span id="quizCnt">—</span> 个结构（提示：看内部结构请开 X 光或剖面剖切）</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="isolateBar"></div>
+
+<div id="hover"></div>
+<div id="annLabel"></div>
+
+<div id="vpan" title="拖动可上下移动视角，双击回中">
+  <div class="lab">上</div>
+  <div class="track"><input type="range" id="vpRange" min="-100" max="100" value="0" step="1"></div>
+  <div class="lab">下</div>
+</div>
+
+<div id="hint">
+  <b>左键拖动</b> 旋转 · <b>滚轮</b> 缩放 · <b>点击结构</b> 查看信息 · <b>右侧滑块</b> 上下移动视角
+</div>
+<div id="count">可交互结构 <b id="cnt">—</b> 个</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./lib/three.module.js",
+    "three/addons/controls/OrbitControls.js": "./lib/OrbitControls.js",
+    "three/addons/loaders/GLTFLoader.js": "./lib/GLTFLoader.js",
+    "three/addons/loaders/DRACOLoader.js": "./lib/DRACOLoader.js"
+  }
+}
+</script>
+<script src="./app.js?v=20261030c" type="module"></script>
+</body>
+</html>
