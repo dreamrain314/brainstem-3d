@@ -1,3 +1,5 @@
 _data/bp3d/
 _data/obj_headers.json
 *.log
+_data/course/
+_data/course/img/
