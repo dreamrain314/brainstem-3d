@@ -162,7 +162,7 @@ async function boot() {
       }
     } catch (e) {}
     state.ann = await fetchJSON('./data/annotations.json?v=20261030a', {});
-    state.nerves = await fetchJSON('./data/nerves.json?v=20261030a', {});
+    state.nerves = await fetchJSON('./data/nerves.json?v=20261104b', {});
     state.editMode = new URLSearchParams(location.search).has('edit');
     if (state.editMode) {
       const eb = document.getElementById('editBar');
@@ -1467,7 +1467,7 @@ function nerveKind(n) {
 function buildNerveTable() {
   const wrap = $('nerveRows');
   wrap.innerHTML = '';
-  const order = ['CN-III', 'CN-IV', 'CN-V', 'CN-VI', 'CN-VII', 'CN-VIII', 'CN-IX', 'CN-X', 'CN-XI', 'CN-XII'];
+  const order = ['CN-I', 'CN-II', 'CN-III', 'CN-IV', 'CN-V', 'CN-VI', 'CN-VII', 'CN-VIII', 'CN-IX', 'CN-X', 'CN-XI', 'CN-XII'];
   for (const cid of order) {
     const n = state.nerves[cid];
     if (!n) continue;
@@ -1486,8 +1486,8 @@ function selectNerve(cid) {
   const n = state.nerves[cid];
   if (!n) return;
   document.querySelectorAll('.nrow').forEach(r => r.classList.toggle('on', r.dataset.cid === cid));
-  // 3D 高亮左右两侧，视角对准两根神经
-  const sids = [`CN-${n.numeral}-L`, `CN-${n.numeral}-R`].filter(s => state.bySid.has(s));
+  // 3D 高亮左右两侧（I 无对应结构则只出详情），视角对准两根神经
+  const sids = (n.sids || [`CN-${n.numeral}-L`, `CN-${n.numeral}-R`]).filter(s => state.bySid.has(s));
   if (sids.length) {
     clearSelection(false);
     state.selected = sids[0];
@@ -1529,7 +1529,8 @@ function selectNerve(cid) {
     `<b>脑干核团：</b>${n.nuclei}<br>` +
     `<b>出入脑部位：</b>${n.exit}<br>` +
     `<b>功能：</b>${n.func}<br>` +
-    `<b>损伤表现：</b>${n.lesion}`;
+    `<b>损伤表现：</b>${n.lesion}` +
+    (sids.length ? '' : '<br><span style="color:var(--dim)">※ 该神经的对应结构未包含在本 3D 模型中。</span>');
 }
 
 /* ---- 任务二总结矩阵 ---- */
