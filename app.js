@@ -832,8 +832,11 @@ function frameBox(box) {
   const dir = camera.position.clone().sub(c);
   if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1);
   const fovRad = camera.fov * Math.PI / 180;
-  const dist = (r / Math.sin(fovRad / 2)) / 0.62;
-  dir.setLength(Math.max(dist, 0.02));
+  // 自动取景距离下限：微小结构（上丘/下丘等）不再把视角拉到异常近。
+  // 下限取默认视距的 22% —— 仍能看清目标，同时保留周边解剖关系。
+  const minDist = (state.homeDist || 4) * 0.22;
+  const dist = Math.max((r / Math.sin(fovRad / 2)) / 0.62, minDist);
+  dir.setLength(dist);
   camera.position.copy(c).add(dir);
   controls.update();
 }
@@ -1514,7 +1517,8 @@ function selectNerve(cid) {
         const c = box.getCenter(new THREE.Vector3());
         const r = Math.max(box.getBoundingSphere(new THREE.Sphere()).radius, 0.05);
         const fovRad = camera.fov * Math.PI / 180;
-        const dist = (r / Math.sin(fovRad / 2)) / 0.72;
+        // 与 frameBox 相同的距离下限，避免细小神经取景过近
+        const dist = Math.max((r / Math.sin(fovRad / 2)) / 0.72, (state.homeDist || 4) * 0.22);
         const dir = new THREE.Vector3(0.45, 0.3, 1).normalize();
         camera.position.copy(c).add(dir.multiplyScalar(dist));
         controls.target.copy(c);
