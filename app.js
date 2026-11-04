@@ -470,7 +470,8 @@ function bindUI() {
   $('mobileBtn').onclick = () => $('tools').classList.toggle('open');
 
   const vp = $('vpRange');
-  const onSlide = () => applyPanY((+vp.value / 100) * state.panRange);
+  // 滑钮向上 = 模型在画面中向上移动(相机反向下移)，故取负号
+  const onSlide = () => applyPanY((-+vp.value / 100) * state.panRange);
   vp.addEventListener('input', onSlide);
   vp.addEventListener('dblclick', () => { vp.value = 0; onSlide(); });
 
@@ -692,9 +693,6 @@ function isQuizTarget(sid) {
 }
 
 function baseFor(sid) {
-  if (state.quiz.active && state.quiz.answered === false && isQuizTarget(sid) && state.quiz.mode === 'name')
-    return QUIZ_COLOR;
-  if (state.quiz.active && state.quiz.answered && isQuizTarget(sid)) return QUIZ_COLOR;
   if (state.keyMode && isKey(sid)) return KEY_COLOR;
   if ((state.nerveType[sid] || state.nerveType[nervePairOf(sid) || '']))
     return NERVE_COLORS[state.nerveType[sid] || state.nerveType[nervePairOf(sid)]];
@@ -704,8 +702,8 @@ function baseFor(sid) {
 }
 
 function refreshEmissive(mesh, sid) {
-  if (sid === state.selected) mesh.material.emissive.copy(SEL_EMISSIVE);
-  else if (state.quiz.active && isQuizTarget(sid)) mesh.material.emissive.copy(QUIZ_EMISSIVE);
+  if (state.quiz.active && isQuizTarget(sid)) mesh.material.emissive.copy(QUIZ_EMISSIVE);
+  else if (sid === state.selected) mesh.material.emissive.copy(SEL_EMISSIVE);
   else if (state.xray) mesh.material.emissive.copy(XRAY_EMISSIVE);
   else mesh.material.emissive.copy(NO_EMISSIVE);
 }
@@ -1333,7 +1331,8 @@ function updateLabelPose() {
 function updateMaterials() {
   state.meshes.forEach(({ mesh, sid }) => {
     applyXrayToMesh(mesh, sid);
-    if (sid === state.selected) setMeshColor(mesh, SEL_COLOR);
+    if (state.quiz.active && isQuizTarget(sid)) setMeshColor(mesh, QUIZ_COLOR);
+    else if (sid === state.selected) setMeshColor(mesh, SEL_COLOR);
     else setMeshColor(mesh, sid === state.hovered ? HOV_COLOR : baseFor(sid));
     refreshEmissive(mesh, sid);
   });
@@ -1710,13 +1709,20 @@ function stopQuiz() {
   updateMaterials();
 }
 function pickTarget() {
-  const pool = quizPool();
-  return pool[Math.floor(Math.random() * pool.length)];
+  // 只抽当前可见的结构：被隐藏/分区关闭/隔离中的结构不进抽选，否则黄色高亮看不见
+  const pool = quizPool().filter(c => c.sids.some(s => {
+    const m = state.bySid.get(s);
+    return m && m[0] && m[0].visible;
+  }));
+  const p = pool.length ? pool : quizPool();
+  return p[Math.floor(Math.random() * p.length)];
 }
 function nextQuiz() {
   const q = state.quiz;
   q.answered = false;
   q.target = pickTarget();
+  clearSelection(false);   // 清选中/悬停，防止蓝/浅蓝盖住黄色目标
+  highlightHover(null);
   updateMaterials();
   const opts = buildOptions(q.target);
   if (q.mode === 'name') {
@@ -1860,9 +1866,10 @@ window.addEventListener('keydown', e => {
   const step = (state.panRange || 1) * 0.05;
   if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
     e.preventDefault();
-    applyPanY(state.panY + (e.key === 'ArrowUp' ? step : -step));
+    // 与滑块同向: ↑ = 模型上移 = 相机下移(panY 减小)
+    applyPanY(state.panY - (e.key === 'ArrowUp' ? step : -step));
     const vp = $('vpRange');
-    if (vp) vp.value = (state.panY / state.panRange) * 100;
+    if (vp) vp.value = (-state.panY / state.panRange) * 100;
   } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     e.preventDefault();
     orbitY(e.key === 'ArrowLeft' ? 0.12 : -0.12);
@@ -1870,4 +1877,4 @@ window.addEventListener('keydown', e => {
 });
 
 /* 调试出口 */
-window.__bs = { state, camera, scene, controls, THREE };
+window.__bs = { state, camera, scene, controls, THREE, updateMaterials, quizPool, pickTarget, frameBox };
