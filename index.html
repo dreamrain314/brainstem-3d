@@ -309,9 +309,9 @@
   #t1ImgBox{position:relative;flex:0 0 52%;min-width:0;border-radius:10px;overflow:hidden;
     background:#fff;border:1px solid var(--line)}
   #t1Img{display:block;width:100%;height:auto}
-  #t1Pins .t1-pin{position:absolute;transform:translate(-50%,-50%);width:26px;height:26px;
-    border-radius:50%;background:rgba(18,22,32,.82);color:#ffd9a8;border:1px solid rgba(255,177,77,.55);
-    font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;
+  #t1Pins .t1-pin{position:absolute;transform:translate(-50%,-50%);width:24px;height:24px;
+    border-radius:50%;background:rgba(18,22,32,.88);color:#ffd9a8;border:1px solid rgba(255,177,77,.55);
+    font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;
     cursor:pointer;user-select:none;box-shadow:0 2px 8px rgba(0,0,0,.35);transition:.12s}
   #t1Pins .t1-pin:hover{background:rgba(77,163,255,.9);color:#fff}
   #t1Pins .t1-pin.on{background:rgba(125,207,142,.92);color:#0d2214;border-color:rgba(125,207,142,.8)}
@@ -511,12 +511,12 @@
       </div>
       <div id="t1Wrap">
         <div id="t1ImgBox">
-          <img id="t1Img" src="./data/task1-figure.png?v=20261030a" alt="椎管内的脊髓（结构辨识 1-17）">
+          <img id="t1Img" src="./data/task1-figure.png?v=20261104a" alt="椎管内的脊髓（结构辨识 1-17）">
           <div id="t1Pins"></div>
         </div>
         <div id="t1Table"></div>
       </div>
-      <div id="t1Note">点击图上或表中的数字揭晓答案。⚠ 项为 AI 初判，请对照老师讲评后在 <code>data/task1.json</code> 中修正。</div>
+      <div id="t1Note">点击图上或表中的数字揭晓答案。答案已按老师标注图核准；徽章经程序对准原图数字位置（数据在 <code>data/task1.json</code>）。</div>
     </div>
     <div class="dock-page" id="page-quiz">
       <div id="quizBox">
@@ -563,6 +563,6 @@
   }
 }
 </script>
-<script src="./app.js?v=20261030d" type="module"></script>
+<script src="./app.js?v=20261104a" type="module"></script>
 </body>
 </html>

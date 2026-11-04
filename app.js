@@ -1604,7 +1604,7 @@ function exportSummaryMd() {
 
 /* ---- 任务一 · 结构辨识（1-17 编号图） ---- */
 async function buildTask1() {
-  const d = await fetchJSON('./data/task1.json?v=20261030a', null);
+  const d = await fetchJSON('./data/task1.json?v=20261104a', null);
   if (!d) return;
   state.task1 = d;
   const pins = $('t1Pins'), table = $('t1Table');
